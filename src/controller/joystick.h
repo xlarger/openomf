@@ -25,8 +25,8 @@ void joystick_free(controller *ctrl);
 
 int joystick_count(void);
 int joystick_nth_id(int n);
-int joystick_name_to_id(const char *name, int offset);
-int joystick_offset(int id, const char *name);
+int joystick_guid_to_id(const char *guid_str, int offset);
+int joystick_guid_offset(int device_index);
 
 void joystick_init(void);
 void joystick_close(void);

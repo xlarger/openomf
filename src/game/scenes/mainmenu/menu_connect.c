@@ -162,7 +162,7 @@ void menu_connect_tick(component *c) {
             if(k->ctrl_type1 == CTRL_TYPE_KEYBOARD) {
                 _setup_keyboard(gs, 1, 0);
             } else if(k->ctrl_type1 == CTRL_TYPE_GAMEPAD) {
-                _setup_joystick(gs, 1, k->joy_name1, k->joy_offset1);
+                _setup_joystick(gs, 1, k->joy_guid1, k->joy_offset1);
             }
             if(!controller_set_delay(game_player_get_ctrl(game_state_get_player(gs, 1)), NET_INPUT_DELAY)) {
                 log_error("unable to set network controller delay");

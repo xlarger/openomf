@@ -22,7 +22,7 @@ void mainmenu_1v1(component *c, void *userdata) {
     if(k->ctrl_type1 == CTRL_TYPE_KEYBOARD) {
         _setup_keyboard(s->gs, 0, 0);
     } else if(k->ctrl_type1 == CTRL_TYPE_GAMEPAD) {
-        _setup_joystick(s->gs, 0, k->joy_name1, k->joy_offset1);
+        _setup_joystick(s->gs, 0, k->joy_guid1, k->joy_offset1);
     }
 
     chr_score_set_difficulty(game_player_get_score(game_state_get_player(s->gs, 0)),
@@ -49,13 +49,13 @@ void mainmenu_1v2(component *c, void *userdata) {
     if(k->ctrl_type1 == CTRL_TYPE_KEYBOARD) {
         _setup_keyboard(s->gs, 0, 0);
     } else if(k->ctrl_type1 == CTRL_TYPE_GAMEPAD) {
-        _setup_joystick(s->gs, 0, k->joy_name1, k->joy_offset1);
+        _setup_joystick(s->gs, 0, k->joy_guid1, k->joy_offset1);
     }
 
     if(k->ctrl_type2 == CTRL_TYPE_KEYBOARD) {
         _setup_keyboard(s->gs, 1, 1);
     } else if(k->ctrl_type2 == CTRL_TYPE_GAMEPAD) {
-        _setup_joystick(s->gs, 1, k->joy_name2, k->joy_offset2);
+        _setup_joystick(s->gs, 1, k->joy_guid2, k->joy_offset2);
     }
 
     chr_score_set_difficulty(game_player_get_score(game_state_get_player(s->gs, 0)), AI_DIFFICULTY_CHAMPION);

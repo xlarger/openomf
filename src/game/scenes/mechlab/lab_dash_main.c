@@ -260,7 +260,7 @@ void lab_dash_sim_done(component *menu, component *submenu) {
         if(k->ctrl_type2 == CTRL_TYPE_KEYBOARD) {
             _setup_keyboard(dw->scene->gs, 1);
         } else if(k->ctrl_type2 == CTRL_TYPE_GAMEPAD) {
-            _setup_joystick(dw->scene->gs, 1, k->joy_name2, k->joy_offset2);
+            _setup_joystick(dw->scene->gs, 1, k->joy_guid2, k->joy_offset2);
         }
         chr_score_set_difficulty(game_player_get_score(game_state_get_player(dw->scene->gs, 0)),
                                  AI_DIFFICULTY_CHAMPION);

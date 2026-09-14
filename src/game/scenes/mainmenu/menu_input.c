@@ -132,19 +132,23 @@ void menu_set_joystick1(component *c, void *userdata) {
         return;
     }
     const char *joy_name = SDL_JoystickNameForIndex(device_index);
-    SDL_JoystickID iid = SDL_JoystickGetDeviceInstanceID(device_index);
+    char guid_str[33];
+    SDL_JoystickGUID guid = SDL_JoystickGetDeviceGUID(device_index);
+    SDL_JoystickGetGUIDString(guid, guid_str, sizeof(guid_str));
     if(local->selected_player == 1) {
         k->ctrl_type1 = CTRL_TYPE_GAMEPAD;
         omf_free(k->joy_name1);
         k->joy_name1 = omf_strdup(joy_name ? joy_name : "Unknown");
-        k->joy_offset1 = joystick_offset(device_index, k->joy_name1);
-        k->joy_iid1 = (int)iid;
+        k->joy_offset1 = joystick_guid_offset(device_index);
+        omf_free(k->joy_guid1);
+        k->joy_guid1 = omf_strdup(guid_str);
     } else {
         k->ctrl_type2 = CTRL_TYPE_GAMEPAD;
         omf_free(k->joy_name2);
         k->joy_name2 = omf_strdup(joy_name ? joy_name : "Unknown");
-        k->joy_offset2 = joystick_offset(device_index, k->joy_name2);
-        k->joy_iid2 = (int)iid;
+        k->joy_offset2 = joystick_guid_offset(device_index);
+        omf_free(k->joy_guid2);
+        k->joy_guid2 = omf_strdup(guid_str);
     }
     reconfigure_controller(((scene *)userdata)->gs);
 }
@@ -157,19 +161,23 @@ void menu_set_joystick2(component *c, void *userdata) {
         return;
     }
     const char *joy_name = SDL_JoystickNameForIndex(device_index);
-    SDL_JoystickID iid = SDL_JoystickGetDeviceInstanceID(device_index);
+    char guid_str[33];
+    SDL_JoystickGUID guid = SDL_JoystickGetDeviceGUID(device_index);
+    SDL_JoystickGetGUIDString(guid, guid_str, sizeof(guid_str));
     if(local->selected_player == 1) {
         k->ctrl_type1 = CTRL_TYPE_GAMEPAD;
         omf_free(k->joy_name1);
         k->joy_name1 = omf_strdup(joy_name ? joy_name : "Unknown");
-        k->joy_offset1 = joystick_offset(device_index, k->joy_name1);
-        k->joy_iid1 = (int)iid;
+        k->joy_offset1 = joystick_guid_offset(device_index);
+        omf_free(k->joy_guid1);
+        k->joy_guid1 = omf_strdup(guid_str);
     } else {
         k->ctrl_type2 = CTRL_TYPE_GAMEPAD;
         omf_free(k->joy_name2);
         k->joy_name2 = omf_strdup(joy_name ? joy_name : "Unknown");
-        k->joy_offset2 = joystick_offset(device_index, k->joy_name2);
-        k->joy_iid2 = (int)iid;
+        k->joy_offset2 = joystick_guid_offset(device_index);
+        omf_free(k->joy_guid2);
+        k->joy_guid2 = omf_strdup(guid_str);
     }
     reconfigure_controller(((scene *)userdata)->gs);
 }

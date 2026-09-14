@@ -58,7 +58,7 @@ void game_state_clone_free(game_state *gs);
 
 void _setup_keyboard(game_state *gs, int player_id, int control_id);
 void _setup_ai(game_state *gs, int player_id);
-int _setup_joystick(game_state *gs, int player_id, const char *joyname, int offset);
+int _setup_joystick(game_state *gs, int player_id, const char *joy_guid, int offset);
 void reconfigure_controller(game_state *gs);
 
 void game_state_menu_poll(game_state *gs, ctrl_event **ev);

@@ -1118,7 +1118,7 @@ void lobby_tick(scene *scene, int paused) {
                     if(k->ctrl_type1 == CTRL_TYPE_KEYBOARD) {
                         _setup_keyboard(scene->gs, player_id, 0);
                     } else if(k->ctrl_type1 == CTRL_TYPE_GAMEPAD) {
-                        _setup_joystick(scene->gs, player_id, k->joy_name1, k->joy_offset1);
+                        _setup_joystick(scene->gs, player_id, k->joy_guid1, k->joy_offset1);
                     }
                     if(!controller_set_delay(game_player_get_ctrl(game_state_get_player(gs, player_id)),
                                              NET_INPUT_DELAY)) {
@@ -1298,7 +1298,7 @@ void lobby_tick(scene *scene, int paused) {
                             if(k->ctrl_type1 == CTRL_TYPE_KEYBOARD) {
                                 _setup_keyboard(scene->gs, player_id, 0);
                             } else if(k->ctrl_type1 == CTRL_TYPE_GAMEPAD) {
-                                _setup_joystick(scene->gs, player_id, k->joy_name1, k->joy_offset1);
+                                _setup_joystick(scene->gs, player_id, k->joy_guid1, k->joy_offset1);
                             }
                             if(!controller_set_delay(game_player_get_ctrl(game_state_get_player(gs, player_id)),
                                                      NET_INPUT_DELAY)) {
@@ -1403,7 +1403,7 @@ void lobby_tick(scene *scene, int paused) {
                         if(k->ctrl_type1 == CTRL_TYPE_KEYBOARD) {
                             _setup_keyboard(scene->gs, player_id, 0);
                         } else if(k->ctrl_type1 == CTRL_TYPE_GAMEPAD) {
-                            _setup_joystick(scene->gs, player_id, k->joy_name1, k->joy_offset1);
+                            _setup_joystick(scene->gs, player_id, k->joy_guid1, k->joy_offset1);
                         }
                         if(!controller_set_delay(game_player_get_ctrl(game_state_get_player(gs, player_id)),
                                                  NET_INPUT_DELAY)) {

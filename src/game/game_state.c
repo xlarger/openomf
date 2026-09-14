@@ -38,6 +38,7 @@
 #include <SDL.h>
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 // slowest dynamic tick, in ms
@@ -52,32 +53,22 @@ enum
 static void _setup_rec_controller(game_state *gs, int player_id, sd_rec_file *rec);
 
 
-// Resolve current SDL device index from a stable joystick INSTANCE ID
-static int sdl_index_from_instance(SDL_JoystickID iid) {
-    for (int i = 0; i < SDL_NumJoysticks(); ++i) {
-        if (SDL_JoystickGetDeviceInstanceID(i) == iid) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-// Bind a player controller by joystick INSTANCE ID (stable across index reorders)
-static int _setup_joystick_by_instance(game_state *gs, int player_id, SDL_JoystickID iid) {
-    int device_index = sdl_index_from_instance(iid);
-    if (device_index < 0) {
-        log_info("No joystick with instance id %d present", (int)iid);
+// Bind a player controller by joystick GUID + offset (stable across sessions)
+static int _setup_joystick_by_guid(game_state *gs, int player_id, const char *guid_str, int offset) {
+    int device_index = joystick_guid_to_id(guid_str, offset);
+    if(device_index < 0) {
+        log_info("No joystick with GUID %s (offset %d) present", guid_str, offset);
         return 0;
     }
     controller *ctrl = omf_calloc(1, sizeof(controller));
     game_player *player = game_state_get_player(gs, player_id);
     controller_init(ctrl, gs);
     int res = joystick_create(ctrl, device_index);
-    if (!res) {
+    if(!res) {
         omf_free(ctrl);
         return 0;
     }
-    if (player_id == 0) {
+    if(player_id == 0) {
         controller_set_delay(ctrl, settings_get()->keys.input1_delay);
     } else {
         controller_set_delay(ctrl, settings_get()->keys.input2_delay);
@@ -85,13 +76,6 @@ static int _setup_joystick_by_instance(game_state *gs, int player_id, SDL_Joysti
     game_player_set_ctrl(player, ctrl);
     game_player_set_selectable(player, 1);
     return res;
-}
-
-// One-shot compatibility: derive instance ID from legacy name+offset if IID is not set
-static SDL_JoystickID derive_instance_from_name_offset_or_neg1(const char *joy_name, int joy_offset) {
-    int idx = joystick_name_to_id(joy_name, joy_offset);
-    if (idx < 0) return -1;
-    return SDL_JoystickGetDeviceInstanceID(idx);
 }
 
 // How long the scene waits after order to move to another scene
@@ -1280,16 +1264,16 @@ void _setup_ai(game_state *gs, int player_id) {
     game_player_set_selectable(player, 0);
 }
 
-int _setup_joystick(game_state *gs, int player_id, const char *joyname, int offset) {
-    if(!joyname) {
-        log_info("Joystick name is NULL for player %d", player_id + 1);
+int _setup_joystick(game_state *gs, int player_id, const char *joy_guid, int offset) {
+    if(!joy_guid || joy_guid[0] == '\0') {
+        log_info("Joystick GUID is not set for player %d", player_id + 1);
         _setup_keyboard(gs, player_id, player_id);
         return 0;
     }
 
-    int joy_id = joystick_name_to_id(joyname, offset);
+    int joy_id = joystick_guid_to_id(joy_guid, offset);
     if(joy_id < 0) {
-        log_info("Unable to resolve joystick '%s' (offset %d) for player %d", joyname, offset, player_id + 1);
+        log_info("Unable to resolve joystick GUID '%s' (offset %d) for player %d", joy_guid, offset, player_id + 1);
         _setup_keyboard(gs, player_id, player_id);
         return 0;
     }
@@ -1326,80 +1310,43 @@ static void _setup_rec_controller(game_state *gs, int player_id, sd_rec_file *re
 
 void reconfigure_controller(game_state *gs) {
     settings_keyboard *k = &settings_get()->keys;
-    bool persist_changed = false;
 
-    // Resolve desired instance IDs from config (strictly follow config)
-    SDL_JoystickID want_iid_p1 = k->joy_iid1;
-    SDL_JoystickID want_iid_p2 = k->joy_iid2;
-
-    // Back-compat: derive once from legacy name+offset if IID not set
-    if (k->ctrl_type1 == CTRL_TYPE_GAMEPAD && want_iid_p1 < 0) {
-        want_iid_p1 = derive_instance_from_name_offset_or_neg1(k->joy_name1, k->joy_offset1);
-    }
-    if (k->ctrl_type2 == CTRL_TYPE_GAMEPAD && want_iid_p2 < 0) {
-        want_iid_p2 = derive_instance_from_name_offset_or_neg1(k->joy_name2, k->joy_offset2);
-    }
-
-    // Enforce uniqueness: never share the same physical joystick between players
-    if (k->ctrl_type1 == CTRL_TYPE_GAMEPAD && k->ctrl_type2 == CTRL_TYPE_GAMEPAD &&
-        want_iid_p1 >= 0 && want_iid_p2 >= 0 && want_iid_p1 == want_iid_p2) {
-        log_error("Both players configured to same joystick instance id %d; Player 2 will fallback to keyboard.", (int)want_iid_p2);
-        want_iid_p2 = -1; // invalidate P2 to avoid mixing IDs
+    // Enforce uniqueness: never bind both players to the same physical joystick
+    bool same_joystick = k->ctrl_type1 == CTRL_TYPE_GAMEPAD && k->ctrl_type2 == CTRL_TYPE_GAMEPAD &&
+                          k->joy_guid1[0] != '\0' && k->joy_offset1 == k->joy_offset2 &&
+                          !strcmp(k->joy_guid1, k->joy_guid2);
+    if(same_joystick) {
+        log_error("Both players configured to same joystick (GUID %s, offset %d); Player 2 will fall back to "
+                  "keyboard.",
+                  k->joy_guid2, k->joy_offset2);
     }
 
     // ---- Player 1: bind by configured type ----
-    switch (k->ctrl_type1) {
+    switch(k->ctrl_type1) {
     case CTRL_TYPE_KEYBOARD:
         _setup_keyboard(gs, 0, 0);
         break;
     case CTRL_TYPE_GAMEPAD:
-        if (want_iid_p1 >= 0) {
-            if (_setup_joystick_by_instance(gs, 0, want_iid_p1)) {
-                if (k->joy_iid1 != want_iid_p1) {
-                    k->joy_iid1 = want_iid_p1;
-                    persist_changed = true;
-                }
-            } else {
-                _setup_keyboard(gs, 0, 0); // explicit fallback; no auto-pick
-            }
-        } else {
+        if(!_setup_joystick_by_guid(gs, 0, k->joy_guid1, k->joy_offset1)) {
             _setup_keyboard(gs, 0, 0);
         }
         break;
     default:
-        // Other controller types (AI/Network) preserved
         break;
     }
 
     // ---- Player 2: bind by configured type ----
-    switch (k->ctrl_type2) {
+    switch(k->ctrl_type2) {
     case CTRL_TYPE_KEYBOARD:
         _setup_keyboard(gs, 1, 1);
         break;
     case CTRL_TYPE_GAMEPAD:
-        if (want_iid_p2 >= 0) {
-            if (_setup_joystick_by_instance(gs, 1, want_iid_p2)) {
-                if (k->joy_iid2 != want_iid_p2) {
-                    k->joy_iid2 = want_iid_p2;
-                    persist_changed = true;
-                }
-            } else {
-                _setup_keyboard(gs, 1, 1);
-            }
-        } else {
+        if(same_joystick || !_setup_joystick_by_guid(gs, 1, k->joy_guid2, k->joy_offset2)) {
             _setup_keyboard(gs, 1, 1);
         }
         break;
     default:
-        // Other controller types (AI/Network) preserved
         break;
-    }
-
-    // Persist newly learned IIDs so future runs bind directly by instance ID
-    if (persist_changed) {
-        settings_save();
-        log_debug("Persisted joystick instance IDs: P1=%d, P2=%d",
-                  (int)k->joy_iid1, (int)k->joy_iid2);
     }
 }
 

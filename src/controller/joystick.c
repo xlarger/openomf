@@ -30,29 +30,19 @@ static inline void joystick_cmd(controller *ctrl, int action, ctrl_event **ev) {
 
 int joystick_count(void) {
     int valid_joysticks = 0;
-    SDL_Joystick *joy;
     for(int i = 0; i < SDL_NumJoysticks(); i++) {
-        joy = SDL_JoystickOpen(i);
-        if(joy) {
+        if(SDL_IsGameController(i)) {
             valid_joysticks++;
-        }
-        if(SDL_JoystickGetAttached(joy)) {
-            SDL_JoystickClose(joy);
         }
     }
     return valid_joysticks;
 }
 
 int joystick_nth_id(int n) {
-    SDL_Joystick *joy;
     int c = 0;
     for(int i = 0; i < SDL_NumJoysticks(); i++) {
-        joy = SDL_JoystickOpen(i);
-        if(joy) {
+        if(SDL_IsGameController(i)) {
             c++;
-            if(SDL_JoystickGetAttached(joy)) {
-                SDL_JoystickClose(joy);
-            }
             if(c == n) {
                 return i;
             }
@@ -61,24 +51,32 @@ int joystick_nth_id(int n) {
     return -1;
 }
 
-int joystick_offset(int id, const char *name) {
+int joystick_guid_offset(int device_index) {
+    char target_guid[33];
+    SDL_JoystickGUID guid = SDL_JoystickGetDeviceGUID(device_index);
+    SDL_JoystickGetGUIDString(guid, target_guid, sizeof(target_guid));
     int offset = 0;
-    for(int i = 0; i < id; i++) {
-        if(i != id && !strcmp(name, SDL_JoystickNameForIndex(i))) {
+    for(int i = 0; i < device_index; i++) {
+        char cur_guid[33];
+        SDL_JoystickGUID g = SDL_JoystickGetDeviceGUID(i);
+        SDL_JoystickGetGUIDString(g, cur_guid, sizeof(cur_guid));
+        if(!strcmp(target_guid, cur_guid)) {
             offset++;
         }
     }
     return offset;
 }
 
-int joystick_name_to_id(const char *name, int offset) {
+int joystick_guid_to_id(const char *guid_str, int offset) {
     for(int i = 0; i < SDL_NumJoysticks(); i++) {
-        if(!strcmp(name, SDL_JoystickNameForIndex(i))) {
-            if(offset) {
-                offset--;
-            } else {
+        char cur_guid[33];
+        SDL_JoystickGUID g = SDL_JoystickGetDeviceGUID(i);
+        SDL_JoystickGetGUIDString(g, cur_guid, sizeof(cur_guid));
+        if(!strcmp(guid_str, cur_guid)) {
+            if(offset == 0) {
                 return i;
             }
+            offset--;
         }
     }
     return -1;
