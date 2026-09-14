@@ -44,7 +44,7 @@ void projectile_finished(object *obj) {
         object_set_animation(obj, &af_get_move(local->af_data, move->successor_id)->ani);
         object_set_repeat(obj, 0);
         object_set_vel(obj, vec2f_create(0, 0));
-        obj->animation_state.finished = 0;
+        object_set_finished(obj, false);
     }
 }
 
@@ -84,15 +84,15 @@ void projectile_move(object *obj) {
         }
         // if not invincible, not ignoring bounds checking and actually has an X velocity (the latter two help with
         // shadow grab)
-    } else if(!local->invincible && !player_frame_isset(obj, "bh") && !IS_ZERO(obj->vel.x)) {
+    } else if(!local->invincible && !player_frame_isset(obj, TAG_BH) && !IS_ZERO(obj->vel.x)) {
         if(obj->pos.x < ARENA_LEFT_WALL) {
             obj->pos.x = ARENA_LEFT_WALL;
-            obj->animation_state.finished = 1;
+            object_set_finished(obj, true);
             projectile_finished(obj);
         }
         if(obj->pos.x > ARENA_RIGHT_WALL) {
             obj->pos.x = ARENA_RIGHT_WALL;
-            obj->animation_state.finished = 1;
+            object_set_finished(obj, true);
             projectile_finished(obj);
         }
     }
@@ -102,7 +102,7 @@ void projectile_move(object *obj) {
         obj->vel.x = obj->vel.x * dampen;
     } else if(obj->pos.y > ARENA_FLOOR) {
         obj->pos.y = ARENA_FLOOR;
-        obj->animation_state.finished = 1;
+        object_set_finished(obj, true);
         projectile_finished(obj);
     }
     if(obj->pos.y >= (ARENA_FLOOR - 5) && IS_ZERO(obj->vel.x) && obj->vel.y < obj->gravity * 1.1 &&
@@ -194,19 +194,16 @@ void debug_surfaces_create(object *obj) {
     projectile_local *local = object_get_userdata(obj);
     surface_create(&local->hit_pixel, 1, 1);
     surface_clear(&local->hit_pixel);
-    image img;
-    surface_to_image(&local->hit_pixel, &img);
-    image_set_pixel(&img, 0, 0, 0xf3);
+    surface_set_pixel(&local->hit_pixel, 0, 0, 0xf3);
     surface_create(&local->proj_origin, 4, 4);
     surface_clear(&local->proj_origin);
-    surface_to_image(&local->proj_origin, &img);
-    image_set_pixel(&img, 0, 0, 0xf6);
-    image_set_pixel(&img, 0, 1, 0xf6);
-    image_set_pixel(&img, 0, 2, 0xf6);
-    image_set_pixel(&img, 0, 3, 0xf6);
-    image_set_pixel(&img, 1, 3, 0xf6);
-    image_set_pixel(&img, 2, 3, 0xf6);
-    image_set_pixel(&img, 3, 3, 0xf6);
+    surface_set_pixel(&local->proj_origin, 0, 0, 0xf6);
+    surface_set_pixel(&local->proj_origin, 0, 1, 0xf6);
+    surface_set_pixel(&local->proj_origin, 0, 2, 0xf6);
+    surface_set_pixel(&local->proj_origin, 0, 3, 0xf6);
+    surface_set_pixel(&local->proj_origin, 1, 3, 0xf6);
+    surface_set_pixel(&local->proj_origin, 2, 3, 0xf6);
+    surface_set_pixel(&local->proj_origin, 3, 3, 0xf6);
 }
 
 #endif

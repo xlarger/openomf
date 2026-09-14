@@ -53,13 +53,13 @@ static void button_render(component *c) {
     }
 }
 
-static int button_action(component *c, int action) {
+static int button_action(component *c, int action, int source) {
     button *b = widget_get_obj(c);
     if(action == ACT_KICK || action == ACT_PUNCH) {
         if(b->click_cb) {
             b->click_cb(c, b->userdata);
         }
-        audio_play_sound(20, 0.5f, 0.0f, 0);
+        audio_play_sound_simple(20, 0);
         return 0;
     }
     return 1;

@@ -11,6 +11,7 @@ OPTION(USE_FORMAT "Use clang-format for checks" OFF)
 OPTION(BUILD_LANGUAGES "Build Language Files" ON)
 OPTION(USE_COLORS "Use colors in log output" ON)
 OPTION(USE_OPUSFILE "Support ogg/opus music files" ON)
+OPTION(USE_EXTENDED_PALETTE "Use 1024-color extended palette instead of 256" ON)
 
 OPTION(USE_MINIUPNPC "Use miniupnpc for port forwarding" ON)
 OPTION(USE_NATPMP "Use natpmp for port forwarding" ON)
@@ -27,6 +28,9 @@ if(USE_NATPMP)
 endif()
 
 project(OpenOMF C)
+
+# Generate compile_commands.json so editors can find the correct headers.
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(USE_PCH ON)
 if(USE_PCH AND USE_TIDY)
@@ -50,20 +54,12 @@ if(MSVC)
     # Disable select warnings:
     # C4100: unreferenced formal parameter
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /wd4100")
-    # C4456: declaration hides previous local declaration
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /wd4456")
-    # C4459: declaration hides previous global declaration
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /wd4459")
     # C4244: implicit conversion, possible loss of data
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /wd4244")
     # C4267: implicit conversion from size_t, possible loss of data
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /wd4267")
-    # C4389: 'equality-operator' : signed/unsigned mismatch
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /wd4389")
     # _CRT_SECURE_NO_WARNINGS: disable warnings when calling functions like strncpy or sscanf
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /D_CRT_SECURE_NO_WARNINGS")
-    # _CRT_NONSTDC_NO_WARNINGS: disable warnings when calling POSIX functions like fileno
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /D_CRT_NONSTDC_NO_WARNINGS")
 
     # Error on certain warnings:
     # C4013: call to undefined function
@@ -83,7 +79,10 @@ if(MSVC)
     # C4702: unreachable code
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /we4702")
 else()
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wno-unused-parameter -Wformat -pedantic -Wvla")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wno-unused-parameter -Wformat=2 -pedantic -Wvla")
+    if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wformat-signedness")
+    endif()
     set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -ggdb -Werror -fno-omit-frame-pointer")
     set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} -g -O2 -fno-omit-frame-pointer -DNDEBUG")
     set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O2 -DNDEBUG")
@@ -170,6 +169,18 @@ foreach (PLUGIN ${ENABLED_AUDIO_BACKEND_PLUGINS})
 endforeach ()
 set_source_files_properties("src/audio/audio.c" PROPERTIES COMPILE_DEFINITIONS "${AUDIO_C_DEFINES}")
 
+# Remove all null-source code from OPENOMF_SRC
+list(FILTER OPENOMF_SRC EXCLUDE REGEX "(sound|music)_sources/null_")
+# Enable null sources in debug builds, for automated testing
+list(APPEND OPENOMF_SRC
+    "$<$<CONFIG:Debug>:src/audio/sound_sources/null_sound_source.c>"
+    "$<$<CONFIG:Debug>:src/audio/sound_sources/null_sound_source.h>"
+    "$<$<CONFIG:Debug>:src/audio/music_sources/null_music_source.c>"
+    "$<$<CONFIG:Debug>:src/audio/music_sources/null_music_source.h>"
+)
+set_source_files_properties("src/game/audio/audio_sources.c"
+    PROPERTIES COMPILE_DEFINITIONS "$<$<CONFIG:Debug>:ENABLE_NULL_AUDIO_SOURCES>")
+
 # Remove all render plugin source code from OPENOMF_SRC
 list(FILTER OPENOMF_SRC EXCLUDE REGEX "^src/video/renderers/.*/")
 # Enable "NULL" renderer in debug builds, for automated testing
@@ -200,12 +211,20 @@ set_source_files_properties("src/video/video.c" PROPERTIES COMPILE_DEFINITIONS "
 # Build core sources first as an object library
 # this can then be reused in tests and main executable to speed things up
 add_library(openomf_core OBJECT ${OPENOMF_SRC})
-target_compile_definitions(openomf_core PUBLIC "$<$<CONFIG:Debug>:DEBUGMODE>")
+target_compile_definitions(openomf_core PUBLIC
+    "$<$<CONFIG:Debug>:DEBUGMODE>"
+    "$<$<BOOL:${USE_EXTENDED_PALETTE}>:USE_EXTENDED_PALETTE>"
+)
 omf_target_precompile_headers(openomf_core PUBLIC
     "<SDL.h>"
     "<enet/enet.h>"
     "<epoxy/gl.h>"
 )
+if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang)$")
+    set_source_files_properties("${CMAKE_SOURCE_DIR}/src/vendored/argtable/argtable3.c"
+        PROPERTIES COMPILE_OPTIONS "-Wno-format-nonliteral"
+    )
+endif()
 target_link_libraries(openomf_core PRIVATE
     openomf::confuse
     openomf::enet
@@ -260,11 +279,6 @@ endif()
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Wl,-s")
     set(CMAKE_C_FLAGS_MINSIZEREL "${CMAKE_C_FLAGS_MINSIZEREL} -Wl,-s")
-endif()
-
-# Configure GCC to accept `// [[fallthrough]]` as a fallthrough comment.
-if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wimplicit-fallthrough=2")
 endif()
 
 set(COREINCS
@@ -411,10 +425,10 @@ endif()
 
 # Make sure libraries are linked
 target_link_libraries(openomf PRIVATE ${CORELIBS})
-target_link_libraries(openomf PRIVATE openomf::argtable openomf::SDL2main openomf::epoxy)
+target_link_libraries(openomf PRIVATE openomf::argtable openomf::zip openomf::SDL2main openomf::epoxy)
 foreach(TARGET ${TOOL_TARGET_NAMES})
     target_link_libraries(${TARGET} PRIVATE ${CORELIBS})
-    target_link_libraries(${TARGET} PRIVATE openomf::argtable openomf::SDL2main openomf::epoxy)
+    target_link_libraries(${TARGET} PRIVATE openomf::argtable openomf::zip openomf::SDL2main openomf::epoxy)
 endforeach()
 
 # Testing stuff
@@ -462,7 +476,8 @@ set(DOC_FILES
     README.md
     LICENSE
     resources/gamecontrollerdb/LICENSE.gamecontrollerdb
-    src/vendored/LICENSE.argtable3
+    src/vendored/argtable/LICENSE.argtable3
+    src/vendored/zip/LICENSE.zip
 )
 
 # Installation
@@ -476,7 +491,8 @@ if(WIN32)
 else()
     # On unixy systems, follow standard.
     install(TARGETS openomf RUNTIME DESTINATION bin COMPONENT Binaries)
-    install(FILES ${DOC_FILES} resources/openomf.bk resources/gamecontrollerdb/gamecontrollerdb.txt resources/icons/openomf.png
+    install(FILES ${DOC_FILES} resources/openomf.bk resources/gamecontrollerdb/gamecontrollerdb.txt
+            resources/icons/openomf.png resources/flatpak/org.openomf.OpenOMF.desktop
         DESTINATION share/games/openomf/resources/
         COMPONENT Data
     )

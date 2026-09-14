@@ -40,7 +40,11 @@ endif()
 
 # argtable
 add_library(openomf::argtable INTERFACE IMPORTED)
-target_include_directories(openomf::argtable INTERFACE "${CMAKE_SOURCE_DIR}/src/vendored")
+target_include_directories(openomf::argtable INTERFACE "${CMAKE_SOURCE_DIR}/src/vendored/argtable")
+
+# zip
+add_library(openomf::zip INTERFACE IMPORTED)
+target_include_directories(openomf::zip INTERFACE "${CMAKE_SOURCE_DIR}/src/vendored/zip")
 
 # enet
 add_library(openomf::enet INTERFACE IMPORTED)
@@ -92,6 +96,12 @@ if(USE_NATPMP)
 endif()
 
 if(USE_LIBPNG)
+    # HACK: alias ZLIB::ZLIBSTATIC for PNGConfig.cmake on x64-windows-static triplet
+    find_package(ZLIB REQUIRED)
+    if(NOT TARGET ZLIB::ZLIB)
+        add_library(ZLIB::ZLIB ALIAS ZLIB::ZLIBSTATIC)
+    endif()
+
     find_package(PNG REQUIRED)
     add_library(openomf::png INTERFACE IMPORTED)
     target_link_libraries(openomf::png INTERFACE PNG::PNG)

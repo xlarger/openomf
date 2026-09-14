@@ -1,9 +1,7 @@
 #include "formats/pcx.h"
 #include "formats/error.h"
 #include "formats/internal/reader.h"
-#include "utils/allocator.h"
-#include <inttypes.h>
-#include <stdio.h>
+#include <assert.h>
 #include <string.h>
 
 static unsigned decode_next_bytes(char *dest, sd_reader *reader) {
@@ -84,7 +82,7 @@ int pcx_load(pcx_file *pcx, const path *filename) {
         return SD_FILE_READ_ERROR;
     }
 
-    if(sd_read_buf(reader, (void *)&(pcx->palette.colors), sizeof(vga_palette)) != 1) {
+    if(sd_read_buf(reader, (void *)&(pcx->palette.colors), 256 * sizeof(vga_color)) != 1) {
         sd_reader_close(reader);
         return SD_FILE_READ_ERROR;
     }
@@ -142,7 +140,9 @@ int pcx_load_font(pcx_font *font, const path *filename) {
 }
 
 int pcx_font_decode(const pcx_font *font, sd_vga_image *o, uint8_t ch, int8_t palette_offset) {
-    if(ch >= font->glyph_count || font == NULL || o == NULL) {
+    assert(font != NULL);
+    assert(o != NULL);
+    if(ch >= font->glyph_count) {
         return SD_INVALID_INPUT;
     }
 

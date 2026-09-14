@@ -76,7 +76,7 @@ void video_scan_renderers(void) {
  * @return true if data was read, false if index is out of range
  */
 bool video_get_renderer_info(int index, const char **name, const char **description) {
-    if(index < 0 && index >= renderer_count) {
+    if(index < 0 || index >= renderer_count) {
         return false;
     }
     if(name != NULL) {
@@ -253,8 +253,8 @@ void video_draw_full(const surface *src_surface, int x, int y, int w, int h, int
 
 void video_draw_offset(const surface *src_surface, int x, int y, int offset, int limit) {
     SDL_Rect dst;
-    dst.w = src_surface->w;
-    dst.h = src_surface->h;
+    dst.w = src_surface->render_w;
+    dst.h = src_surface->render_h;
     dst.x = x;
     dst.y = y;
     draw_args(src_surface, &dst, 0, 0, offset, limit, 255, 0, 0);
@@ -271,8 +271,8 @@ void video_draw_size(const surface *src_surface, int x, int y, int w, int h) {
 
 void video_draw(const surface *src_surface, int x, int y) {
     SDL_Rect dst;
-    dst.w = src_surface->w;
-    dst.h = src_surface->h;
+    dst.w = src_surface->render_w;
+    dst.h = src_surface->render_h;
     dst.x = x;
     dst.y = y;
     draw_args(src_surface, &dst, 0, 0, 0, 255, 255, 0, 0);
@@ -281,8 +281,8 @@ void video_draw(const surface *src_surface, int x, int y) {
 void video_draw_remap(const surface *src_surface, int x, int y, int remap_offset, int remap_rounds,
                       unsigned int options) {
     SDL_Rect dst;
-    dst.w = src_surface->w;
-    dst.h = src_surface->h;
+    dst.w = src_surface->render_w;
+    dst.h = src_surface->render_h;
     dst.x = x;
     dst.y = y;
     draw_args(src_surface, &dst, remap_offset, remap_rounds, 0, 255, 255, 0, options);

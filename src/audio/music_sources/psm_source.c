@@ -1,4 +1,4 @@
-#include "audio/sources/psm_source.h"
+#include "audio/music_sources/psm_source.h"
 #include "utils/allocator.h"
 #include "utils/c_array_util.h"
 #include "utils/log.h"
@@ -20,14 +20,14 @@ unsigned psm_get_resamplers(const music_resampler **resamplers) {
     return supported_resamplers_count;
 }
 
-static void psm_render(void *userdata, char *stream, int len) {
-    xmp_context ctx = userdata;
-    assert(ctx);
-    xmp_play_buffer(ctx, stream, len, 0);
+static void psm_render(void *userdata, char *stream, const int len) {
+    const xmp_context context = userdata;
+    assert(context);
+    xmp_play_buffer(context, stream, len, 0);
 }
 
 static void psm_close(void *userdata) {
-    xmp_context context = userdata;
+    const xmp_context context = userdata;
     if(context != NULL) {
         xmp_end_player(context);
         xmp_release_module(context);
@@ -35,37 +35,31 @@ static void psm_close(void *userdata) {
     }
 }
 
-static void psm_set_volume(void *userdata, float volume) {
-    xmp_context context = userdata;
-    int clamped = clamp(volume * 100, 0, 100);
+static void psm_set_volume(void *userdata, const float volume) {
+    const xmp_context context = userdata;
+    const int clamped = clamp(volume * 100, 0, 100);
     if(xmp_set_player(context, XMP_PLAYER_VOLUME, clamped) != 0) {
         log_error("Unable to set music volume");
     }
 }
 
-bool psm_load(music_source *src, int channels, int sample_rate, int resampler, const char *file) {
+bool psm_load(music_source *src, const int channels, const int sample_rate, const int resampler, const char *file) {
     xmp_context context;
     if((context = xmp_create_context()) == NULL) {
         log_error("Unable to initialize XMP context.");
         goto exit_0;
     }
 
-    // Load the module file
     if(xmp_load_module(context, file) < 0) {
         log_error("Unable to open module file");
         goto exit_0;
     }
 
-    // Show some information
     struct xmp_module_info mi;
     xmp_get_module_info(context, &mi);
     log_debug("Loaded music track %s (%s)", mi.mod->name, mi.mod->type);
 
-    // Start the player
-    int flags = 0;
-    if(channels == 1) {
-        flags |= XMP_FORMAT_MONO;
-    }
+    const int flags = (channels == 1) ? XMP_FORMAT_MONO : 0;
     if(xmp_start_player(context, sample_rate, flags) != 0) {
         log_error("Unable to start module playback");
         goto exit_1;

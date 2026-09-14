@@ -3,21 +3,22 @@
 #include "video/renderers/opengl3/sdl_window.h"
 
 #include "video/renderers/opengl3/helpers/object_array.h"
+#include "video/renderers/opengl3/helpers/palette.h"
 #include "video/renderers/opengl3/helpers/remaps.h"
 #include "video/renderers/opengl3/helpers/render_target.h"
 #include "video/renderers/opengl3/helpers/shaders.h"
-#include "video/renderers/opengl3/helpers/shared.h"
 #include "video/renderers/opengl3/helpers/texture_atlas.h"
 
 #include "utils/allocator.h"
 #include "utils/log.h"
+#include "utils/miscmath.h"
 #include "video/vga_state.h"
 
 #define TEX_UNIT_ATLAS 0
 #define TEX_UNIT_FBO 1
 #define TEX_UNIT_FBO2 2
 #define TEX_UNIT_REMAPS 3
-#define PAL_BLOCK_BINDING 0
+#define TEX_UNIT_PALETTE 4
 #define NATIVE_W 320
 #define NATIVE_H 200
 
@@ -26,7 +27,7 @@ typedef struct gl3_context {
     SDL_GLContext *gl_context;
     texture_atlas *atlas;
     object_array *objects;
-    shared *shared;
+    gl_palette *palette;
     render_target *paletted_target;
     render_target *rgba_target;
     remaps *remaps;
@@ -52,6 +53,7 @@ typedef struct gl3_context {
     GLuint palette_prog_id;
     GLuint rgba_prog_id;
     GLuint scale_prog_id;
+    GLuint debug_atlas_prog_id;
 
     video_screenshot_signal screenshot_cb;
 } gl3_context;
@@ -136,10 +138,13 @@ static bool setup_context(void *userdata, int window_w, int window_h, bool fulls
     if(!create_program(&ctx->rgba_prog_id, "rgba.vert", "rgba.frag")) {
         goto error_3;
     }
+    if(!create_program(&ctx->debug_atlas_prog_id, "rgba.vert", "debug_atlas.frag")) {
+        goto error_4;
+    }
     const char *scale_vert, *scale_frag;
     get_scaling_shader_names(scaling_mode, &scale_vert, &scale_frag);
     if(!create_program(&ctx->scale_prog_id, scale_vert, scale_frag)) {
-        goto error_4;
+        goto error_5;
     }
 
     // Fetch viewport size which may be different from window size.
@@ -159,8 +164,8 @@ static bool setup_context(void *userdata, int window_w, int window_h, bool fulls
     // Create the rest of the graphics objects
     ctx->atlas = atlas_create(TEX_UNIT_ATLAS, 2048, 2048);
     ctx->objects = object_array_create(2048.0f, 2048.0f);
-    ctx->shared = shared_create();
-    ctx->paletted_target = render_target_create(TEX_UNIT_FBO, fb_w, fb_h, GL_RGBA8, GL_RGBA, GL_NEAREST);
+    ctx->palette = gl_palette_create(TEX_UNIT_PALETTE);
+    ctx->paletted_target = render_target_create(TEX_UNIT_FBO, fb_w, fb_h, GL_RGBA16, GL_RGBA, GL_NEAREST);
     ctx->rgba_target = render_target_create(TEX_UNIT_FBO2, fb_w, fb_h, GL_RGBA8, GL_RGBA, GL_NEAREST);
     ctx->remaps = remaps_create(TEX_UNIT_REMAPS);
 
@@ -179,16 +184,24 @@ static bool setup_context(void *userdata, int window_w, int window_h, bool fulls
     // Activate RGBA conversion program and bind palette etc.
     activate_program(ctx->rgba_prog_id);
     bind_uniform_4fv(ctx->rgba_prog_id, "projection", projection_matrix);
-    GLuint pal_ubo_id = shared_get_block(ctx->shared);
-    bind_uniform_block(ctx->rgba_prog_id, "palette", PAL_BLOCK_BINDING, pal_ubo_id);
+    bind_uniform_1i(ctx->rgba_prog_id, "palette", TEX_UNIT_PALETTE);
     bind_uniform_1i(ctx->rgba_prog_id, "framebuffer", TEX_UNIT_FBO);
     bind_uniform_1i(ctx->rgba_prog_id, "remaps", TEX_UNIT_REMAPS);
+
+    // Activate debug atlas program and bind its variables
+    activate_program(ctx->debug_atlas_prog_id);
+    bind_uniform_4fv(ctx->debug_atlas_prog_id, "projection", projection_matrix);
+    bind_uniform_1i(ctx->debug_atlas_prog_id, "palette", TEX_UNIT_PALETTE);
+    bind_uniform_1i(ctx->debug_atlas_prog_id, "atlas", TEX_UNIT_ATLAS);
 
     // Activate scale program and bind uniforms
     reload_scaler_program(ctx);
 
     log_info("OpenGL3 Renderer initialized!");
     return true;
+
+error_5:
+    delete_program(ctx->debug_atlas_prog_id);
 
 error_4:
     delete_program(ctx->rgba_prog_id);
@@ -251,7 +264,7 @@ static bool reset_context_with(void *userdata, int window_w, int window_h, bool 
         ctx->fb_scale = fb_scale;
         render_target_free(&ctx->paletted_target);
         render_target_free(&ctx->rgba_target);
-        ctx->paletted_target = render_target_create(TEX_UNIT_FBO, fb_w, fb_h, GL_RGBA8, GL_RGBA, GL_NEAREST);
+        ctx->paletted_target = render_target_create(TEX_UNIT_FBO, fb_w, fb_h, GL_RGBA16, GL_RGBA, GL_NEAREST);
         ctx->rgba_target = render_target_create(TEX_UNIT_FBO2, fb_w, fb_h, GL_RGBA8, GL_RGBA, GL_NEAREST);
     }
 
@@ -290,11 +303,12 @@ static void close_context(void *userdata) {
     remaps_free(&ctx->remaps);
     render_target_free(&ctx->paletted_target);
     render_target_free(&ctx->rgba_target);
-    shared_free(&ctx->shared);
+    gl_palette_free(&ctx->palette);
     object_array_free(&ctx->objects);
     atlas_free(&ctx->atlas);
     delete_program(ctx->palette_prog_id);
     delete_program(ctx->rgba_prog_id);
+    delete_program(ctx->debug_atlas_prog_id);
     delete_program(ctx->scale_prog_id);
     SDL_GL_DeleteContext(ctx->gl_context);
     SDL_DestroyWindow(ctx->window);
@@ -319,10 +333,11 @@ static void move_target(void *userdata, int x, int y) {
     ctx->target_move_y = y;
 }
 
-static void render_prepare(void *userdata, unsigned framebuffer_options) {
+static void render_prepare(void *userdata, const unsigned framebuffer_options) {
     const gl3_context *ctx = userdata;
     object_array_prepare(ctx->objects);
 
+    activate_program(ctx->rgba_prog_id);
     bind_uniform_1u(ctx->rgba_prog_id, "framebuffer_options", framebuffer_options);
 }
 
@@ -392,9 +407,9 @@ static inline void set_screen_viewport(const gl3_context *ctx) {
  */
 static inline void flush_palettes(gl3_context *ctx) {
     vga_index first, last;
-    vga_palette *palette;
-    if(vga_state_is_palette_dirty(&palette, &first, &last)) {
-        shared_set_palette(ctx->shared, palette, first, last);
+    vga_palette *pal;
+    if(vga_state_is_palette_dirty(&pal, &first, &last)) {
+        gl_palette_update(ctx->palette, pal, first, last);
         vga_state_mark_palette_flushed();
     }
 }
@@ -435,8 +450,7 @@ static inline void finish_offscreen(gl3_context *ctx) {
 static void finish_debug_atlas(gl3_context *ctx) {
     render_target_deactivate();
     set_screen_viewport(ctx);
-    activate_program(ctx->rgba_prog_id);
-    bind_uniform_1i(ctx->rgba_prog_id, "framebuffer", TEX_UNIT_ATLAS);
+    activate_program(ctx->debug_atlas_prog_id);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 }
@@ -491,10 +505,10 @@ static void render_finish(void *userdata) {
 
     // Limit framerate if requested.
     if(ctx->framerate_limit != 0) {
-        uint64_t frame_time = SDL_GetPerformanceCounter() - ctx->last_tick;
+        const uint64_t frame_time = SDL_GetPerformanceCounter() - ctx->last_tick;
         if(frame_time < ctx->framerate_limit) {
-            double wait = ctx->framerate_limit - frame_time;
-            double ms_conv = SDL_GetPerformanceFrequency() / 1000;
+            const double wait = ctx->framerate_limit - frame_time;
+            const double ms_conv = SDL_GetPerformanceFrequency() / 1000;
             SDL_Delay(wait / ms_conv); // TODO: SDL_DelayNS() or alternative.
         }
         ctx->last_tick = SDL_GetPerformanceCounter();
@@ -510,11 +524,20 @@ static void render_area_prepare(void *userdata, const SDL_Rect *area) {
 static void render_area_finish(void *userdata, surface *dst) {
     gl3_context *ctx = userdata;
     finish_offscreen(ctx);
-    SDL_Rect *r = &ctx->culling_area;
-    unsigned char *buffer = omf_malloc(r->w * r->h);
-    glReadPixels(r->x, r->y, r->w, r->h, GL_RED, GL_UNSIGNED_BYTE, buffer);
-    surface_create_from_data_flip(dst, r->w, r->h, buffer);
-    surface_set_transparency(dst, -1);
+
+    // Ensure we don't read garbage from outside the FBO
+    const SDL_Rect *area = &ctx->culling_area;
+    const int x0 = clamp(area->x, 0, NATIVE_W);
+    const int y0 = clamp(area->y, 0, NATIVE_H);
+    const int x1 = clamp(area->x + area->w, 0, NATIVE_W);
+    const int y1 = clamp(area->y + area->h, 0, NATIVE_H);
+
+    // FBO may be scaled!
+    const int scale = ctx->fb_scale;
+    const SDL_Rect r = (SDL_Rect){x0 * scale, y0 * scale, (x1 - x0) * scale, (y1 - y0) * scale};
+    uint16_t *buffer = omf_calloc(r.w * r.h, sizeof(uint16_t));
+    glReadPixels(r.x, r.y, r.w, r.h, GL_RED, GL_UNSIGNED_SHORT, buffer);
+    surface_create_from_flip_scale(dst, r.w, r.h, buffer, 1023.0f / 65535.0f);
     omf_free(buffer);
 }
 

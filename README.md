@@ -18,6 +18,12 @@ For more detailed information about the project, please see
 Installation
 ------------
 
+### AppImage
+
+1. Download the latest .AppImage executable from https://github.com/omf2097/openomf/releases
+2. Run `chmod +x OpenOMF-<version>-x86_64.AppImage`
+3. Play the game with `./OpenOMF-<version>-x86_64.AppImage`
+
 ### Ubuntu
 
 1. Download the latest .deb package from https://github.com/omf2097/openomf/releases
@@ -39,7 +45,8 @@ for more information.
 
 OpenOMF contains pieces of other software, which have licenses of their own:
 - resources/gamecontrollerdb.txt is under [zlib license](resources/gamecontrollerdb/LICENSE.gamecontrollerdb)
-- src/vendored/argtable3 is under multiple licenses, please see [LICENSE](src/vendored/LICENSE.argtable3)
+- src/vendored/argtable3 is under multiple licenses, please see [LICENSE](src/vendored/argtable/LICENSE.argtable3)
+- src/vendored/zip and miniz is under the MIT license, please see [LICENSE](src/vendored/zip/LICENSE.zip)
 
 And finally, the icon resources in resources/icons fall under CC-BY 4.0 license; please see 
 [LICENSE](resources/icons/LICENSE) and https://creativecommons.org/licenses/by/4.0/ for details.
